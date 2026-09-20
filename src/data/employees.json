@@ -1,0 +1,34 @@
+[
+  {
+    "employeeId": "A1001",
+    "name": "张伟",
+    "department": "AI平台部",
+    "position": "算法工程师",
+    "annualLeave": 10,
+    "office": "南京"
+  },
+  {
+    "employeeId": "A1002",
+    "name": "李娜",
+    "department": "产品技术部",
+    "position": "产品经理",
+    "annualLeave": 8,
+    "office": "北京"
+  },
+  {
+    "employeeId": "A1003",
+    "name": "王强",
+    "department": "基础设施部",
+    "position": "后端工程师",
+    "annualLeave": 12,
+    "office": "上海"
+  },
+  {
+    "employeeId": "A1004",
+    "name": "赵敏",
+    "department": "大模型研发部",
+    "position": "算法工程师",
+    "annualLeave": 15,
+    "office": "南京"
+  }
+]

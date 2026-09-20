@@ -1,0 +1,54 @@
+[
+  {
+    "id": "q001",
+    "question": "什么是 RAG？",
+    "expectedTools": ["rag_search"],
+    "expectedKeywords": ["RAG", "检索增强生成"]
+  },
+  {
+    "id": "q002",
+    "question": "Kubernetes 是什么？",
+    "expectedTools": ["rag_search"],
+    "expectedKeywords": ["Kubernetes", "容器"]
+  },
+  {
+    "id": "q003",
+    "question": "计算 123 × 456",
+    "expectedTools": ["calculator"]
+  },
+  {
+    "id": "q004",
+    "question": "东京现在几点？",
+    "expectedTools": ["date_time"]
+  },
+  {
+    "id": "q005",
+    "question": "张伟在哪个部门工作？",
+    "expectedTools": ["employee_lookup"]
+  },
+  {
+    "id": "q006",
+    "question": "张伟有多少天年假？",
+    "expectedTools": ["employee_lookup"]
+  },
+  {
+    "id": "q007",
+    "question": "张伟有10天年假，已经请了3天，还剩多少？",
+    "expectedTools": ["employee_lookup", "calculator"]
+  },
+  {
+    "id": "q008",
+    "question": "赵敏在哪个部门工作，她还有多少年假？",
+    "expectedTools": ["employee_lookup"]
+  },
+  {
+    "id": "q009",
+    "question": "RAG 是什么？另外计算 100 × 25。",
+    "expectedTools": ["rag_search", "calculator"]
+  },
+  {
+    "id": "q010",
+    "question": "王强在哪个部门？",
+    "expectedTools": ["employee_lookup"]
+  }
+]
