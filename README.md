@@ -9,9 +9,10 @@
 [![Vue.js](https://img.shields.io/badge/Vue.js-3.x-4FC08D)](https://vuejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-Frontend-646CFF)](https://vite.dev/)
 
-**核心能力：** RAG · Tool Calling · Multi-turn Memory · Agent Trace · Evaluation · LLM-as-a-Judge
+**核心能力：** RAG · Tool Calling · Multi-turn Memory · Agent Trace · Evaluation Dashboard · LLM-as-a-Judge
 
 EnterprisePilot 是一个面向企业场景的多工具 AI 智能体项目，集成了大语言模型、RAG 检索增强生成、工具调用、执行 Trace 和评测能力。该项目的目标是构建一个可观测、可追踪、可扩展的企业知识助手，用于解决内部知识问答、员工信息查询、计算任务和多步工具协作等问题。
+
 <p align="center">
   <img src="./display.png" alt="EnterprisePilot UI Screenshot" width="1200" />
 </p>
@@ -22,8 +23,10 @@ EnterprisePilot 不是一个单纯的聊天机器人，而是一个具备以下�
 
 - 基于企业知识库进行 RAG 检索
 - 支持多种工具调用：计算、日期时间、员工查询等
+- 基于 thread / conversation context 支持多轮对话记忆
 - 通过 LangGraph 构建多步骤 Agent 工作流
 - 记录完整执行 Trace，便于调试和解释
+- 提供 Dashboard 视图，展示总览指标、历史运行和执行轨迹
 - 提供 Benchmark / Evaluation 模块，衡量工具调用、检索命中率、延迟和回答质量
 - 支持前后端联动演示，适合企业演示或技术汇报
 
@@ -40,18 +43,27 @@ EnterprisePilot 不是一个单纯的聊天机器人，而是一个具备以下�
 - `date_time`：查询时间
 - `employee_lookup`：员工信息查询
 
-### 3. 可观测执行链
+### 3. 多轮记忆与会话隔离
+项目支持基于 threadId 的多轮对话记忆，同时每次新会话会生成独立线程，避免历史工具调用或旧 trace 混入当前会话。
+
+### 4. 可观测执行链
 每次请求都会记录 Agent 的决策、工具调用、工具返回结果和最终回答，用户可以在前端查看完整 Trace。
 
-### 4. 评测框架
+### 5. Dashboard 评估中心
+右侧面板采用 Dashboard / Trace Details 的双视图设计：
+
+- Dashboard：展示总体评估指标、最近运行历史、运行质量摘要
+- Trace Details：展示当前或指定会话的工具调用时序与执行链
+
+### 6. 评测框架
 项目中内置了评测模块，可以对以下维度进行衡量：
 
 - Tool Calling Accuracy
 - Retrieval Hit Rate
 - Latency
-- Answer Quality
+- Answer Quality（LLM-as-a-Judge / heuristic fallback）
 
-### 5. 前后端解耦
+### 7. 前后端解耦
 
 - 后端：Express + TypeScript + LangGraph + OpenAI-compatible API
 - 前端：Vue 3 + Vite
