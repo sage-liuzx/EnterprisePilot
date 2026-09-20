@@ -1,5 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { StateGraph, MessagesAnnotation, START, END } from "@langchain/langgraph";
+import { StateGraph, MessagesAnnotation, START, END,MemorySaver } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { SystemMessage } from "@langchain/core/messages";
 import { calculator } from "../tools/calculator.js";
@@ -112,5 +112,8 @@ const workflow = new StateGraph(MessagesAnnotation)
   .addEdge("tools", "agent");
 
 // ==================== 7. 编译 ====================
+const checkpointer = new MemorySaver();
 
-export const agent = workflow.compile();
+export const agent = workflow.compile({
+  checkpointer
+});

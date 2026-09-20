@@ -6,6 +6,7 @@ import { agent } from "../agent/graph.js";
 import { evaluateConversation } from "../evaluation/evaluator.js";
 
 const server = express();
+const threadMessageStore = new Map<string, any[]>();
 
 server.use(cors());
 server.use(express.json());
@@ -75,13 +76,19 @@ function buildTrace(messages: any[]) {
 
 server.post("/api/chat", async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message,thread: threadId } = req.body;
 
     if (!message || typeof message !== "string") {
-      return res.status(400).json({
-        error: "message 必须是字符串",
-      });
-    }
+        return res.status(400).json({
+            error: "message 必须是字符串",
+        });
+        }
+
+        if (!threadId || typeof threadId !== "string") {
+        return res.status(400).json({
+            error: "threadId 必须是字符串",
+        });
+        }
 
     console.log("\n================================");
     console.log("🤖 EnterprisePilot API");
@@ -89,27 +96,35 @@ server.post("/api/chat", async (req, res) => {
     console.log("👤 用户：", message);
 
     const startTime = Date.now();
+    const previousMessages = threadMessageStore.get(threadId) ?? [];
 
     const result = await agent.invoke({
-      messages: [new HumanMessage(message)],
+      messages: [...previousMessages, new HumanMessage(message)],
+    },{
+      configurable: {
+        thread_id: threadId
+      }
     });
 
     const totalLatency = Date.now() - startTime;
 
-    const messages = result.messages;
+    const fullMessages = result.messages;
+    const currentTurnMessages = fullMessages.slice(previousMessages.length);
 
-    const lastMessage = messages[messages.length - 1];
+    threadMessageStore.set(threadId, fullMessages);
+
+    const lastMessage = currentTurnMessages[currentTurnMessages.length - 1] ?? fullMessages[fullMessages.length - 1];
 
     const answer =
       typeof lastMessage.content === "string"
         ? lastMessage.content
         : JSON.stringify(lastMessage.content);
 
-    const toolCalls = messages
+    const toolCalls = currentTurnMessages
       .filter((msg: any) => msg.tool_calls?.length)
       .flatMap((msg: any) => msg.tool_calls);
 
-    const traceSteps = buildTrace(messages);
+    const traceSteps = buildTrace(currentTurnMessages);
 
     console.log("💬 最终回答：", answer);
     console.log("⏱️ 总耗时：", totalLatency, "ms");

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
 interface Message {
   role: "user" | "assistant";
@@ -56,6 +56,7 @@ interface EvaluationResult {
 
 interface ChatSession {
   id: number;
+  threadId: string;
   question: string;
   answer: string;
   trace: {
@@ -69,8 +70,65 @@ const input = ref("");
 const loading = ref(false);
 const messages = ref<Message[]>([]);
 const chatSessions = ref<ChatSession[]>([]);
-
+const activePanel = ref<"dashboard" | "trace">("dashboard");
 const toolCalls = ref<ToolCall[]>([]);
+const activeThreadId = ref<string>(`thread-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`);
+
+function createThreadId() {
+  return `thread-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function resetConversation() {
+  messages.value = [];
+  chatSessions.value = [];
+  toolCalls.value = [];
+  activeThreadId.value = createThreadId();
+  input.value = "";
+}
+
+const overallStats = computed(() => {
+  const sessions = chatSessions.value;
+  const totalRuns = sessions.length;
+
+  if (totalRuns === 0) {
+    return {
+      totalRuns: 0,
+      avgScore: 0,
+      toolPassRate: 0,
+      retrievalHitRate: 0,
+      avgLatency: 0,
+    };
+  }
+
+  const totalScore = sessions.reduce((sum, session) => {
+    return sum + (session.evaluation?.answerQuality?.score ?? 0);
+  }, 0);
+
+  const toolPassCount = sessions.filter(
+    (session) => session.evaluation?.toolCallingAccuracy?.passed
+  ).length;
+
+  const retrievalHitCount = sessions.filter(
+    (session) => session.evaluation?.retrievalHitRate?.hit
+  ).length;
+
+  const totalLatency = sessions.reduce(
+    (sum, session) => sum + (session.trace?.totalLatency ?? 0),
+    0
+  );
+
+  return {
+    totalRuns,
+    avgScore: Number((totalScore / totalRuns).toFixed(1)),
+    toolPassRate: Math.round((toolPassCount / totalRuns) * 100),
+    retrievalHitRate: Math.round((retrievalHitCount / totalRuns) * 100),
+    avgLatency: Math.round(totalLatency / totalRuns),
+  };
+});
+
+const recentRuns = computed(() => {
+  return [...chatSessions.value].slice(-5).reverse();
+});
 
 function addMessage(role: Message["role"], text: string) {
   messages.value.push({ role, text });
@@ -99,10 +157,12 @@ async function sendMessage() {
   }
 
   const userText = input.value.trim();
+  const threadId = activeThreadId.value;
   input.value = "";
 
   const currentSession: ChatSession = {
     id: Date.now(),
+    threadId,
     question: userText,
     answer: "",
     trace: {
@@ -123,7 +183,11 @@ async function sendMessage() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ message: userText }),
+      body: JSON.stringify({
+        message: userText,
+        thread: threadId,
+        threadId,
+      }),
     });
 
     if (!response.ok) {
@@ -156,6 +220,8 @@ async function sendMessage() {
       totalLatency: backendTrace.totalLatency ?? 0,
       steps: traceSteps,
     };
+
+    chatSessions.value = [...chatSessions.value];
   } catch (error) {
     console.error(error);
     const failedText = "请求 EnterprisePilot 失败，请检查后端 API 是否正常运行。";
@@ -182,9 +248,14 @@ function handleKeydown(event: KeyboardEvent) {
         <p>Enterprise RAG · Tool Calling · Trace</p>
       </div>
 
-      <div class="status">
-        <span class="status-dot"></span>
-        Online
+      <div class="header-actions">
+        <button class="secondary-button" @click="resetConversation" :disabled="loading">
+          New Chat
+        </button>
+        <div class="status">
+          <span class="status-dot"></span>
+          Online
+        </div>
       </div>
     </header>
 
@@ -233,98 +304,185 @@ function handleKeydown(event: KeyboardEvent) {
 
       <aside class="trace-panel">
         <div class="section-title">
-          <span>Agent Trace</span>
-          <small v-if="chatSessions.length">{{ chatSessions.length }} 轮</small>
+          <span>Evaluation Overview</span>
+          <small v-if="chatSessions.length">{{ chatSessions.length }} runs</small>
         </div>
 
-        <div v-if="chatSessions.length === 0" class="empty-trace">暂无 Tool 调用</div>
-
-        <div v-else class="trace-sessions">
-          <div
-            v-for="(session, sessionIndex) in chatSessions"
-            :key="session.id"
-            class="session-card"
+        <div class="panel-tabs">
+          <button
+            class="tab-button"
+            :class="{ active: activePanel === 'dashboard' }"
+            @click="activePanel = 'dashboard'"
           >
-            <div class="session-header">
-              <span class="session-index">对话 {{ sessionIndex + 1 }}</span>
-              <small v-if="session.trace.totalLatency">{{ session.trace.totalLatency }} ms</small>
+            Overview
+          </button>
+          <button
+            class="tab-button"
+            :class="{ active: activePanel === 'trace' }"
+            @click="activePanel = 'trace'"
+          >
+            Trace Details
+          </button>
+        </div>
+
+        <div v-if="activePanel === 'dashboard'" class="panel-content dashboard-panel">
+          <div class="summary-grid">
+            <div class="summary-card">
+              <span class="summary-label">Runs</span>
+              <strong>{{ overallStats.totalRuns }}</strong>
+              <small>Total evaluations</small>
+            </div>
+            <div class="summary-card accent">
+              <span class="summary-label">Avg Score</span>
+              <strong>{{ overallStats.avgScore }}/5</strong>
+              <small>Answer quality</small>
+            </div>
+            <div class="summary-card success">
+              <span class="summary-label">Tool Pass</span>
+              <strong>{{ overallStats.toolPassRate }}%</strong>
+              <small>Tool calling</small>
+            </div>
+            <div class="summary-card info">
+              <span class="summary-label">Retrieval</span>
+              <strong>{{ overallStats.retrievalHitRate }}%</strong>
+              <small>Knowledge hit</small>
+            </div>
+          </div>
+
+          <div class="overview-block">
+            <div class="mini-header">
+              <span>Performance Overview</span>
             </div>
 
-            <div class="session-question">
-              <span class="label">Q</span>
-              <div>{{ session.question }}</div>
-            </div>
-
-            <div v-if="session.evaluation" class="evaluation-box">
-              <div class="metric-row">
-                <span class="metric-label">① Tool Calling Accuracy</span>
-                <span class="metric-value">
-                  {{ session.evaluation.toolCallingAccuracy?.passed ? '✓' : '✗' }}
-                  {{ session.evaluation.toolCallingAccuracy?.details?.map((detail) => `${detail.expected}:${detail.result}`).join(' / ') || 'N/A' }}
-                </span>
+            <div class="progress-list">
+              <div class="progress-row">
+                <div class="progress-meta">
+                  <span>Tool pass rate</span>
+                  <strong>{{ overallStats.toolPassRate }}%</strong>
+                </div>
+                <div class="progress-bar">
+                  <span :style="{ width: `${overallStats.toolPassRate}%` }"></span>
+                </div>
               </div>
 
-              <div class="metric-row">
-                <span class="metric-label">② Retrieval Hit Rate</span>
-                <span class="metric-value">
-                  {{ session.evaluation.retrievalHitRate?.hit ? 'Hit' : 'Miss' }}
-                  {{ session.evaluation.retrievalHitRate?.summary ? `· ${session.evaluation.retrievalHitRate.summary}` : '' }}
-                </span>
+              <div class="progress-row">
+                <div class="progress-meta">
+                  <span>Retrieval hit rate</span>
+                  <strong>{{ overallStats.retrievalHitRate }}%</strong>
+                </div>
+                <div class="progress-bar purple">
+                  <span :style="{ width: `${overallStats.retrievalHitRate}%` }"></span>
+                </div>
               </div>
 
-              <div class="metric-row">
-                <span class="metric-label">③ Latency</span>
-                <span class="metric-value">
-                  Average {{ session.evaluation.latency?.averageLatency ?? 0 }} ms
-                  / P95 {{ session.evaluation.latency?.p95Latency ?? 0 }} ms
-                </span>
-              </div>
-
-              <div class="metric-row">
-                <span class="metric-label">④ Answer Quality</span>
-                <span class="metric-value">
-                  {{ session.evaluation.answerQuality?.score ?? 0 }}/5
-                  {{ session.evaluation.answerQuality?.method ? `· ${session.evaluation.answerQuality.method === 'llm-as-a-judge' ? 'LLM Judge' : 'Heuristic'}` : '' }}
-                  {{ session.evaluation.answerQuality?.summary ? `· ${session.evaluation.answerQuality.summary}` : '' }}
-                </span>
+              <div class="progress-row">
+                <div class="progress-meta">
+                  <span>Average latency</span>
+                  <strong>{{ overallStats.avgLatency }} ms</strong>
+                </div>
+                <div class="progress-bar orange">
+                  <span :style="{ width: `${Math.min(overallStats.avgLatency / 5, 100)}%` }"></span>
+                </div>
               </div>
             </div>
+          </div>
 
-            <div v-if="session.trace.steps.length === 0" class="empty-step">暂无 trace</div>
+          <div class="history-block">
+            <div class="mini-header">
+              <span>Recent runs</span>
+            </div>
 
-            <div v-else class="trace-list">
+            <div v-if="recentRuns.length === 0" class="empty-trace">No evaluation data yet</div>
+            <div v-else class="history-list">
               <div
-                v-for="(step, stepIndex) in session.trace.steps"
-                :key="`${session.id}-${step.type}-${step.tool ?? 'agent'}-${stepIndex}`"
-                class="trace-step"
+                v-for="(session, index) in recentRuns"
+                :key="session.id"
+                class="history-item"
               >
-                <div v-if="step.type === 'agent'" class="trace-card agent-card">
-                  <div class="trace-header">
-                    <span class="trace-badge agent">Agent</span>
-                    <strong>{{ step.status === 'tool_call' ? '调用 Tool' : '生成回答' }}</strong>
-                  </div>
-
-                  <div class="trace-summary">{{ getStepSummary(step) }}</div>
-
-                  <div v-if="step.toolCalls?.length" class="tool-chips">
-                    <span
-                      v-for="(call, callIndex) in step.toolCalls"
-                      :key="`${call.name}-${callIndex}`"
-                      class="tool-chip"
-                    >
-                      {{ call.name }}
-                    </span>
-                  </div>
+                <div class="history-topline">
+                  <span class="history-index">Run {{ recentRuns.length - index }}</span>
+                  <span
+                    class="history-badge"
+                    :class="{
+                      pass: session.evaluation?.toolCallingAccuracy?.passed,
+                      warn: !session.evaluation?.toolCallingAccuracy?.passed,
+                    }"
+                  >
+                    {{ session.evaluation?.toolCallingAccuracy?.passed ? 'Pass' : 'Review' }}
+                  </span>
                 </div>
 
-                <div v-else class="trace-card tool-card">
-                  <div class="trace-header">
-                    <span class="trace-badge tool">Tool</span>
-                    <strong>{{ step.tool }}</strong>
+                <div class="history-question">{{ session.question }}</div>
+
+                <div class="history-meta">
+                  <span>Score {{ session.evaluation?.answerQuality?.score ?? 0 }}/5</span>
+                  <span>Latency {{ session.trace.totalLatency }} ms</span>
+                </div>
+
+                <div class="history-metrics">
+                  <span>Tool: {{ session.evaluation?.toolCallingAccuracy?.passed ? 'Good' : 'Low' }}</span>
+                  <span>Retrieval: {{ session.evaluation?.retrievalHitRate?.hit ? 'Hit' : 'Miss' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="panel-content trace-sessions">
+          <div v-if="chatSessions.length === 0" class="empty-trace">暂无 Tool 调用</div>
+
+          <div v-else>
+            <div
+              v-for="(session, sessionIndex) in chatSessions"
+              :key="session.id"
+              class="session-card"
+            >
+              <div class="session-header">
+                <span class="session-index">对话 {{ sessionIndex + 1 }}</span>
+                <small v-if="session.trace.totalLatency">{{ session.trace.totalLatency }} ms</small>
+              </div>
+
+              <div class="session-question">
+                <span class="label">Q</span>
+                <div>{{ session.question }}</div>
+              </div>
+
+              <div v-if="session.trace.steps.length === 0" class="empty-step">暂无 trace</div>
+
+              <div v-else class="trace-list">
+                <div
+                  v-for="(step, stepIndex) in session.trace.steps"
+                  :key="`${session.id}-${step.type}-${step.tool ?? 'agent'}-${stepIndex}`"
+                  class="trace-step"
+                >
+                  <div v-if="step.type === 'agent'" class="trace-card agent-card">
+                    <div class="trace-header">
+                      <span class="trace-badge agent">Agent</span>
+                      <strong>{{ step.status === 'tool_call' ? '调用 Tool' : '生成回答' }}</strong>
+                    </div>
+
+                    <div class="trace-summary">{{ getStepSummary(step) }}</div>
+
+                    <div v-if="step.toolCalls?.length" class="tool-chips">
+                      <span
+                        v-for="(call, callIndex) in step.toolCalls"
+                        :key="`${call.name}-${callIndex}`"
+                        class="tool-chip"
+                      >
+                        {{ call.name }}
+                      </span>
+                    </div>
                   </div>
 
-                  <div class="trace-summary">{{ getStepSummary(step) }}</div>
-                  <div v-if="step.toolCallId" class="trace-meta">callId: {{ step.toolCallId }}</div>
+                  <div v-else class="trace-card tool-card">
+                    <div class="trace-header">
+                      <span class="trace-badge tool">Tool</span>
+                      <strong>{{ step.tool }}</strong>
+                    </div>
+
+                    <div class="trace-summary">{{ getStepSummary(step) }}</div>
+                    <div v-if="step.toolCallId" class="trace-meta">callId: {{ step.toolCallId }}</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -379,6 +537,21 @@ function handleKeydown(event: KeyboardEvent) {
   text-transform: uppercase;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.secondary-button {
+  width: auto;
+  padding: 8px 12px;
+  background: linear-gradient(180deg, #f8fafc, #e2e8f0);
+  color: #334155;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: none;
+}
+
 .status {
   display: inline-flex;
   align-items: center;
@@ -402,7 +575,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 .main {
   display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(300px, 420px);
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 460px);
   gap: 22px;
   max-width: 1460px;
   margin: 0 auto;
@@ -428,6 +601,16 @@ function handleKeydown(event: KeyboardEvent) {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 140px);
+  min-height: calc(100vh - 140px);
+  overflow: hidden;
+}
+
+.panel-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
 }
 
 .section-title {
@@ -446,6 +629,31 @@ function handleKeydown(event: KeyboardEvent) {
   font-weight: 600;
 }
 
+.panel-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px 0;
+}
+
+.tab-button {
+  flex: 1;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-button.active {
+  background: linear-gradient(180deg, #eef2ff, #e2e8f0);
+  color: #312e81;
+  border-color: rgba(99, 102, 241, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.1);
+}
+
 .conversation {
   flex: 1;
   min-height: 0;
@@ -458,19 +666,22 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 .conversation::-webkit-scrollbar,
-.trace-sessions::-webkit-scrollbar {
+.trace-sessions::-webkit-scrollbar,
+.dashboard-panel::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 .conversation::-webkit-scrollbar-thumb,
-.trace-sessions::-webkit-scrollbar-thumb {
+.trace-sessions::-webkit-scrollbar-thumb,
+.dashboard-panel::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.6);
 }
 
 .conversation::-webkit-scrollbar-track,
-.trace-sessions::-webkit-scrollbar-track {
+.trace-sessions::-webkit-scrollbar-track,
+.dashboard-panel::-webkit-scrollbar-track {
   background: transparent;
 }
 
@@ -604,6 +815,187 @@ button:disabled {
   box-shadow: none;
 }
 
+.dashboard-panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  padding: 16px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.02);
+}
+
+.summary-card.accent {
+  background: linear-gradient(180deg, #eef2ff, #edf2ff);
+}
+
+.summary-card.success {
+  background: linear-gradient(180deg, #ecfdf5, #f0fdf4);
+}
+
+.summary-card.info {
+  background: linear-gradient(180deg, #eff6ff, #f0f9ff);
+}
+
+.summary-label {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.summary-card strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 28px;
+  color: #0f172a;
+}
+
+.summary-card small {
+  display: block;
+  margin-top: 6px;
+  color: #64748b;
+}
+
+.overview-block,
+.history-block {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+}
+
+.mini-header {
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #475569;
+  font-size: 12px;
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+  overflow: hidden;
+}
+
+.progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.progress-bar.purple span {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6);
+}
+
+.progress-bar.orange span {
+  background: linear-gradient(90deg, #f59e0b, #f97316);
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  padding: 12px 12px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.history-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.history-index {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.history-badge {
+  display: inline-block;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.history-badge.pass {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.history-badge.warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.history-question {
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.history-meta,
+.history-metrics {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.history-metrics {
+  color: #475569;
+  font-weight: 600;
+}
+
 .empty-trace {
   padding: 28px 20px;
   color: #94a3b8;
@@ -611,20 +1003,10 @@ button:disabled {
   font-size: 14px;
 }
 
-.trace-panel {
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 140px);
-}
-
 .trace-sessions {
-  flex: 1;
-  min-height: 0;
   padding: 16px;
-  overflow-y: scroll;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
   overscroll-behavior: contain;
+  height: 100%;
 }
 
 .session-card {
