@@ -10,11 +10,11 @@
 [![Vite](https://img.shields.io/badge/Vite-Frontend-646CFF)](https://vite.dev/)
 
 **核心能力：** RAG · Tool Calling · Multi-turn Memory · Agent Trace · Evaluation · LLM-as-a-Judge
+
+EnterprisePilot 是一个面向企业场景的多工具 AI 智能体项目，集成了大语言模型、RAG 检索增强生成、工具调用、执行 Trace 和评测能力。该项目的目标是构建一个可观测、可追踪、可扩展的企业知识助手，用于解决内部知识问答、员工信息查询、计算任务和多步工具协作等问题。
 <p align="center">
   <img src="./display.png" alt="EnterprisePilot UI Screenshot" width="1200" />
 </p>
-
-EnterprisePilot 是一个面向企业场景的多工具 AI 智能体项目，集成了大语言模型、RAG 检索增强生成、工具调用、执行 Trace 和评测能力。该项目的目标是构建一个可观测、可追踪、可扩展的企业知识助手，用于解决内部知识问答、员工信息查询、计算任务和多步工具协作等问题。
 
 ## 项目概览
 
