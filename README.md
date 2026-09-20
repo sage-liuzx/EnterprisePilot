@@ -1,5 +1,15 @@
 # EnterprisePilot
+## 技术栈
 
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)](https://www.typescriptlang.org/)
+[![LangChain.js](https://img.shields.io/badge/LangChain.js-LLM%20%26%20RAG-1C3C3C)](https://js.langchain.com/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-Agent%20Workflow-1C3C3C)](https://langchain-ai.github.io/langgraphjs/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933)](https://nodejs.org/)
+[![Express](https://img.shields.io/badge/Express-REST%20API-000000)](https://expressjs.com/)
+[![Vue.js](https://img.shields.io/badge/Vue.js-3.x-4FC08D)](https://vuejs.org/)
+[![Vite](https://img.shields.io/badge/Vite-Frontend-646CFF)](https://vite.dev/)
+
+**核心能力：** RAG · Tool Calling · Multi-turn Memory · Agent Trace · Evaluation · LLM-as-a-Judge
 <p align="center">
   <img src="./display.png" alt="EnterprisePilot UI Screenshot" width="1200" />
 </p>
